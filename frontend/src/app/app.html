@@ -1,0 +1,243 @@
+<div class="page">
+  <div class="glow glow-left"></div>
+  <div class="glow glow-right"></div>
+
+  <header class="top-bar">
+    <div class="brand">
+      <div class="crest">EC</div>
+      <div>
+        <p class="eyebrow">National Election Commission</p>
+        <h1>Secure Voting Portal</h1>
+      </div>
+    </div>
+    <div class="status-chip" [class.success]="isAuthenticated()">
+      <span class="dot"></span>
+      <span>{{ isAuthenticated() ? 'Verified voter' : 'Authentication in progress' }}</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="summary">
+      <p class="badge">Phase {{ stepIndex() + 1 }} of 4</p>
+      <h2>Smart ID &amp; biometric verification</h2>
+      <p class="lede">
+        Authenticate with your registered mobile device, then confirm your identity through face and
+        fingerprint checks before voting.
+      </p>
+
+      <div class="stepper">
+        <div class="stepper-row" *ngFor="let meta of steps; let i = index"
+          [class.active]="meta.key === step() && !voteSubmitted()"
+          [class.done]="i < stepIndex() || (meta.key === 'vote' && voteSubmitted())">
+          <div class="marker">
+            <span *ngIf="i < stepIndex() || (meta.key === 'vote' && voteSubmitted())" class="check">✓</span>
+            <span *ngIf="i >= stepIndex() && !(meta.key === 'vote' && voteSubmitted())">{{ i + 1 }}</span>
+          </div>
+          <div>
+            <p class="step-title">{{ (meta.key === 'vote' && voteSubmitted()) ? 'Voted' : meta.title }}</p>
+            <p class="step-caption">{{ (meta.key === 'vote' && voteSubmitted()) ? 'Ballot successfully cast.' :
+              meta.caption }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">
+        Demo only: device actions are simulated; no personal data leaves this browser session.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="card" *ngIf="step() === 'smartId'">
+        <div class="card-header">
+          <h3>Smart ID authentication</h3>
+          <p>
+            Hold your registered phone near the secure reader. The system listens for a trusted Smart
+            ID handshake.
+          </p>
+        </div>
+        <div class="smart-id">
+          <div class="scanner">
+            <div class="scanner-body">
+              <div class="beam"></div>
+              <div class="pulse"></div>
+            </div>
+            <div class="phone shadow"></div>
+          </div>
+          <div class="actions end">
+            <button class="ghost" type="button">Troubleshoot device</button>
+            <button class="primary" type="button" (click)="advance('smartId')">Continue</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" *ngIf="step() === 'face'">
+        <div class="card-header">
+          <h3>Biometric capture: face</h3>
+          <p>Center your face inside the guide. Good lighting helps automatic alignment.</p>
+        </div>
+        <div class="camera">
+          <div class="camera-view">
+            <img *ngIf="photoData()" class="camera-feed snapshot" [src]="photoData()!" alt="Captured frame" />
+            <video #faceVideo class="camera-feed" autoplay muted playsinline
+              [class.hidden]="!cameraActive() || !!photoData()"></video>
+            <div class="face-ring"></div>
+            <div class="hud" *ngIf="!cameraError()">Camera ready · Position your face</div>
+            <div class="hud error" *ngIf="cameraError()">
+              {{ cameraError() }} · <button class="inline" type="button" (click)="startCamera()">Retry</button>
+            </div>
+          </div>
+        </div>
+        <div class="actions dual">
+          <button class="ghost" type="button" (click)="resetPhoto()">Reset</button>
+          <button class="primary" type="button" (click)="takePhoto()" [disabled]="photoTaken()">
+            Take photo
+          </button>
+        </div>
+        <div class="actions end">
+          <button class="primary wide" type="button" (click)="advance('face')" [disabled]="!photoTaken()">
+            Continue to fingerprint
+          </button>
+        </div>
+        <p class="note" *ngIf="photoTaken()">Face scan captured locally for this demo.</p>
+      </div>
+
+      <div class="card" *ngIf="step() === 'fingerprint'">
+        <div class="card-header">
+          <h3>Biometric capture: fingerprint</h3>
+          <p>Place your index finger on the reader, then confirm to finish verification.</p>
+        </div>
+        <div class="fingerprint">
+          <div class="print-visual"></div>
+          <div class="actions dual">
+            <button class="ghost" type="button" (click)="resetFingerprint()">Reset</button>
+            <button class="primary" type="button" (click)="confirmFingerprint()" [disabled]="fingerprintConfirmed()">
+              Confirm fingerprint
+            </button>
+          </div>
+        </div>
+        <div class="actions end">
+          <button class="primary wide" type="button" (click)="advance('fingerprint')"
+            [disabled]="!fingerprintConfirmed()">
+            Proceed to ballot
+          </button>
+        </div>
+        <p class="note" *ngIf="fingerprintConfirmed()">Fingerprint stored for this session only.</p>
+      </div>
+
+      <div class="card vote" *ngIf="step() === 'vote' && !voteSubmitted()">
+        <div class="card-header">
+          <h3>Cast your ballot</h3>
+          <p>Select your constituency and cast votes for both Parliament and State Assembly.</p>
+        </div>
+
+        <!-- Location Selection -->
+        <div class="location-bar">
+          <div class="field">
+            <label>State</label>
+            <select (change)="onStateChange($event)">
+              <option *ngFor="let s of states" [value]="s.name" [selected]="s === selectedState()">{{ s.name }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Parliament (P)</label>
+            <select (change)="onDistrictChange($event)">
+              <option *ngFor="let d of selectedState()?.districts" [value]="d.name"
+                [selected]="d === selectedDistrict()">
+                {{ d.parliament.code }} {{ d.name }}
+              </option>
+            </select>
+          </div>
+          <div class="field" *ngIf="selectedDistrict()?.duns?.length">
+            <label>State Assembly (N)</label>
+            <select (change)="onDunChange($event)">
+              <option *ngFor="let dun of selectedDistrict()?.duns" [value]="dun.code"
+                [selected]="dun === selectedDUN()">
+                {{ dun.code }} {{ dun.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="ballot-container">
+          <!-- Parliament Vote -->
+          <div class="ballot-section">
+            <div class="section-header">
+              <span class="badge-seat">Parliament</span>
+              <h4>{{ selectedDistrict()?.parliament?.code }} {{ selectedDistrict()?.parliament?.name }}</h4>
+            </div>
+            <div class="candidates-list">
+              <article *ngFor="let c of selectedDistrict()?.parliament?.candidates" class="candidate-card"
+                [class.selected]="parliamentVote() === c.id" (click)="selectParliament(c.id)">
+                <div class="check-mark" *ngIf="parliamentVote() === c.id">✓</div>
+                <img [src]="c.image" class="candidate-image" alt="{{ c.name }}" />
+                <div class="candidate-info">
+                  <p class="party">{{ c.party }}</p>
+                  <h5>{{ c.name }}</h5>
+                  <p class="agenda">{{ c.agenda }}</p>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <!-- State Vote -->
+          <div class="ballot-section" *ngIf="selectedDUN()">
+            <div class="section-header">
+              <span class="badge-seat">State Assembly</span>
+              <h4>{{ selectedDUN()?.code }} {{ selectedDUN()?.name }}</h4>
+            </div>
+            <div class="candidates-list">
+              <article *ngFor="let c of selectedDUN()?.candidates" class="candidate-card"
+                [class.selected]="stateVote() === c.id" (click)="selectState(c.id)">
+                <div class="check-mark" *ngIf="stateVote() === c.id">✓</div>
+                <img [src]="c.image" class="candidate-image" alt="{{ c.name }}" />
+                <div class="candidate-info">
+                  <p class="party">{{ c.party }}</p>
+                  <h5>{{ c.name }}</h5>
+                  <p class="agenda">{{ c.agenda }}</p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions end">
+          <p class="status-text" *ngIf="!parliamentVote() || (selectedDUN() && !stateVote())">
+            Please select one candidate for available seats.
+          </p>
+          <button class="primary wide" type="button" (click)="submitVote()"
+            [disabled]="!parliamentVote() || (selectedDUN() && !stateVote())">
+            Submit Ballot
+          </button>
+        </div>
+      </div>
+
+      <!-- Success Screen -->
+      <div class="card success-view" *ngIf="voteSubmitted()">
+        <div class="success-content">
+          <div class="icon-circle">
+            <div class="finger-ink"></div>
+          </div>
+          <h2>Terima Kasih!</h2>
+          <p class="sub-head">Your vote has been securely recorded.</p>
+
+          <div class="receipt">
+            <div class="receipt-item">
+              <span>Parliament</span>
+              <strong>{{ selectedDistrict()?.parliament?.code }} {{ selectedDistrict()?.parliament?.name }}</strong>
+            </div>
+            <div class="receipt-item">
+              <span>State Assembly</span>
+              <strong>{{ selectedDUN()?.code }} {{ selectedDUN()?.name }}</strong>
+            </div>
+            <div class="receipt-footer">
+              <p>Election Commission of Malaysia</p>
+              <small>{{ now | date:'medium' }}</small>
+            </div>
+          </div>
+
+          <button class="primary" (click)="restart()">Return to Home</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
